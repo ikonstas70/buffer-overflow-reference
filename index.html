@@ -20,7 +20,7 @@
     .nav-links{display:flex;gap:22px;list-style:none;}
     .nav-links a{color:var(--muted);text-decoration:none;font-size:11px;letter-spacing:.07em;text-transform:uppercase;font-weight:500;transition:color .15s;}
     .nav-links a:hover{color:var(--red);}
-    header{padding:120px 40px 80px;text-align:center;background:radial-gradient(ellipse at 50% -10%,#1a0a0a 0%,var(--bg) 65%);border-bottom:1px solid var(--border);}
+    header{padding:172px 40px 80px;text-align:center;background:radial-gradient(ellipse at 50% -10%,#1a0a0a 0%,var(--bg) 65%);border-bottom:1px solid var(--border);}
     .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);color:var(--red);font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;padding:5px 16px;border-radius:20px;margin-bottom:24px;}
     .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--red);box-shadow:0 0 6px var(--red);}
     h1{font-size:clamp(26px,4vw,48px);font-weight:700;color:var(--heading);letter-spacing:-.5px;line-height:1.15;margin-bottom:14px;}
@@ -34,7 +34,7 @@
     .toc-title{grid-column:1/-1;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:12px;}
     .toc a{color:var(--cyan);text-decoration:none;font-size:13px;transition:color .15s;}
     .toc a:hover{color:var(--green);}
-    .sec-head{display:flex;align-items:center;gap:14px;margin:110px 0 52px; padding-bottom:8px; scroll-margin-top:80px;}
+    .sec-head{display:flex;align-items:center;gap:14px;margin:58px 0 52px; padding-bottom:8px; scroll-margin-top:80px;}
     .sec-icon{font-size:18px;}
     .sec-label{font-size:17px;font-weight:700;color:var(--heading);}
     .sec-line{flex:1;height:1px;background:var(--border);}
@@ -89,6 +89,7 @@
     <li><a href="#heap">Heap Exploits</a></li>
     <li><a href="#debugging">Debugging</a></li>
     <li><a href="#gdb">GDB Session</a></li>
+    <li><a href="#gdbref">GDB Ref</a></li>
   </ul>
 </nav>
 
@@ -128,6 +129,8 @@
     <a href="#troubleshooting">11 · Troubleshooting Guide</a>
     <a href="#gdb">12 · Annotated GDB Session</a>
     <a href="#commands">13 · Command Reference</a>
+    <a href="#buftopo">14 · Buffer &amp; Memory Topology</a>
+    <a href="#gdbref">15 · GDB Workflows — Complete Ref</a>
   </nav>
 
   <!-- ═══════════ 1. FUNDAMENTALS ═══════════ -->
@@ -820,6 +823,653 @@ Num  Type        Enb  Address              What
       <tr><td><code>--track-origins=yes</code></td><td>Show where uninitialized values were created (high overhead)</td></tr>
       <tr><td><code>--error-limit=no</code></td><td>Don't stop after 100 errors</td></tr>
       <tr><td><code>--gen-suppressions=all</code></td><td>Generate suppression file for known false positives</td></tr>
+    </tbody>
+  </table>
+
+
+  <!-- ═══════════ 14. BUFFER TOPOLOGY ═══════════ -->
+  <div id="buftopo" class="sec-head">
+    <span class="sec-icon">🗺</span>
+    <span class="sec-label">Buffer &amp; Memory Topology</span>
+    <div class="sec-line"></div>
+    <span class="sec-count">§14</span>
+  </div>
+
+  <h2>Stack Frame Buffer Layout</h2>
+  <p>When a function is called, the compiler allocates a stack frame. Buffers live at the lowest addresses (highest numeric distance from RSP in typical layouts). An overflow grows toward the canary, saved RBP, and finally the return address.</p>
+
+  <div class="diagram-wrap">
+    <svg viewBox="0 0 680 420" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:680px;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 Z" fill="#58a6ff"/></marker>
+        <marker id="rarr" markerWidth="8" markerHeight="8" refX="2" refY="3" orient="auto"><path d="M8,0 L8,6 L0,3 Z" fill="#f85149"/></marker>
+      </defs>
+      <!-- Background -->
+      <rect width="680" height="420" fill="#0d1117"/>
+
+      <!-- Title -->
+      <text x="340" y="22" fill="#8b949e" font-size="11" text-anchor="middle" letter-spacing="2">STACK FRAME MEMORY LAYOUT (x86-64, grows downward ↓)</text>
+
+      <!-- High address label -->
+      <text x="12" y="55" fill="#8b949e" font-size="10">HIGH ADDR</text>
+      <text x="12" y="390" fill="#8b949e" font-size="10">LOW ADDR</text>
+      <line x1="60" y1="40" x2="60" y2="400" stroke="#30363d" stroke-width="1" stroke-dasharray="4,4"/>
+
+      <!-- Caller frame -->
+      <rect x="80" y="38" width="280" height="34" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+      <text x="220" y="59" fill="#3fb950" font-size="12" text-anchor="middle">Caller's Stack Frame</text>
+
+      <!-- Return address -->
+      <rect x="80" y="74" width="280" height="34" fill="#2d1b1b" stroke="#f85149" stroke-width="1.5"/>
+      <text x="220" y="95" fill="#f85149" font-size="12" text-anchor="middle" font-weight="bold">Saved Return Address (RIP)</text>
+      <text x="390" y="95" fill="#f85149" font-size="10">← overflow target</text>
+
+      <!-- Saved RBP -->
+      <rect x="80" y="110" width="280" height="34" fill="#1f1b2d" stroke="#bc8cff" stroke-width="1"/>
+      <text x="220" y="131" fill="#bc8cff" font-size="12" text-anchor="middle">Saved Base Pointer (RBP)</text>
+
+      <!-- Canary -->
+      <rect x="80" y="146" width="280" height="34" fill="#1d2b1d" stroke="#3fb950" stroke-width="1.5"/>
+      <text x="220" y="167" fill="#3fb950" font-size="12" text-anchor="middle" font-weight="bold">Stack Canary (random 8 bytes)</text>
+      <text x="390" y="160" fill="#3fb950" font-size="10">checked on return</text>
+      <text x="390" y="175" fill="#8b949e" font-size="10">SIGABRT if corrupted</text>
+
+      <!-- Local variables -->
+      <rect x="80" y="182" width="280" height="34" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      <text x="220" y="203" fill="#8b949e" font-size="12" text-anchor="middle">Local Variables (int, pointers…)</text>
+
+      <!-- Buffer -->
+      <rect x="80" y="218" width="280" height="100" fill="#1a1a0a" stroke="#d29922" stroke-width="1.5"/>
+      <text x="220" y="244" fill="#d29922" font-size="12" text-anchor="middle" font-weight="bold">char buf[256]</text>
+      <text x="220" y="262" fill="#d29922" font-size="11" text-anchor="middle">← attacker-controlled input</text>
+      <text x="220" y="282" fill="#d29922" font-size="10" text-anchor="middle">buf[0] at RSP+offset</text>
+      <text x="220" y="300" fill="#d29922" font-size="10" text-anchor="middle">buf[255] = last safe byte</text>
+      <text x="220" y="315" fill="#f85149" font-size="10" text-anchor="middle">buf[256+] = OVERFLOW ZONE</text>
+
+      <!-- RSP arrow -->
+      <line x1="370" y1="318" x2="370" y2="220" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="375" y="310" fill="#58a6ff" font-size="10">RSP</text>
+
+      <!-- Overflow arrow -->
+      <line x1="44" y1="318" x2="44" y2="75" stroke="#f85149" stroke-width="1.5" marker-end="url(#rarr)"/>
+      <text x="4" y="205" fill="#f85149" font-size="9" writing-mode="vertical-rl" text-anchor="middle">OVERFLOW DIRECTION</text>
+
+      <!-- Pattern bytes annotation -->
+      <text x="80" y="355" fill="#f85149" font-size="11">0x41414141  0x41414141  0x41414141…   ← 'AAAA' fill pattern</text>
+      <text x="80" y="372" fill="#8b949e" font-size="11">cyclic pattern: Aa0Aa1Aa2…              ← pwntools cyclic(300)</text>
+      <text x="80" y="389" fill="#8b949e" font-size="11">offset found when saved RIP = pattern   ← cyclic_find($rip_value)</text>
+    </svg>
+    <p class="diagram-caption">Figure: Stack frame layout — overflow grows from buf[] upward through canary → RBP → return address</p>
+  </div>
+
+  <h2>Heap Chunk Topology (glibc ptmalloc)</h2>
+  <p>Every malloc'd region is wrapped in a <strong>chunk header</strong>. Corrupting the <code style="font-family:monospace;color:var(--cyan)">size</code> field or <code style="font-family:monospace;color:var(--cyan)">fd/bk</code> pointers gives an allocator primitive — read or write anywhere in the process.</p>
+
+  <div class="diagram-wrap">
+    <svg viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:680px;font-family:'SFMono-Regular',Consolas,monospace;font-size:12px;">
+      <rect width="680" height="300" fill="#0d1117"/>
+      <text x="340" y="22" fill="#8b949e" font-size="11" text-anchor="middle" letter-spacing="2">GLIBC PTMALLOC CHUNK LAYOUT (64-bit)</text>
+
+      <!-- Chunk A -->
+      <text x="80" y="50" fill="#8b949e" font-size="10">malloc() returns →</text>
+      <!-- prev_size -->
+      <rect x="180" y="35" width="320" height="30" fill="#161b22" stroke="#30363d"/>
+      <text x="340" y="55" fill="#8b949e" font-size="11" text-anchor="middle">prev_size  (8 bytes — used if prev chunk is free)</text>
+      <!-- size -->
+      <rect x="180" y="65" width="320" height="30" fill="#1f1b2d" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="340" y="85" fill="#bc8cff" font-size="11" text-anchor="middle" font-weight="bold">size | flags  (8 bytes)  [P|M|A bits]</text>
+      <!-- user data arrow -->
+      <line x1="160" y1="96" x2="160" y2="100" stroke="#3fb950" stroke-width="1"/>
+      <text x="80" y="113" fill="#3fb950" font-size="10">user data →</text>
+      <!-- user data -->
+      <rect x="180" y="95" width="320" height="60" fill="#1a2a1a" stroke="#3fb950" stroke-width="1.5"/>
+      <text x="340" y="120" fill="#3fb950" font-size="11" text-anchor="middle" font-weight="bold">User data  (malloc'd bytes)</text>
+      <text x="340" y="138" fill="#3fb950" font-size="10" text-anchor="middle">fd / bk pointers live here when chunk is FREE</text>
+      <!-- Next chunk -->
+      <rect x="180" y="155" width="320" height="30" fill="#161b22" stroke="#30363d"/>
+      <text x="340" y="175" fill="#8b949e" font-size="11" text-anchor="middle">Next chunk: prev_size  (8 bytes)</text>
+      <rect x="180" y="185" width="320" height="30" fill="#1f1b2d" stroke="#30363d"/>
+      <text x="340" y="205" fill="#8b949e" font-size="11" text-anchor="middle">Next chunk: size | flags</text>
+
+      <!-- Annotations right side -->
+      <text x="520" y="52" fill="#8b949e" font-size="10">0x0 if prev in use</text>
+      <text x="520" y="80" fill="#bc8cff" font-size="10">P=prev_in_use</text>
+      <text x="520" y="92" fill="#bc8cff" font-size="10">M=mmap'd  A=non-main</text>
+      <text x="520" y="130" fill="#d29922" font-size="10">fd → next free chunk</text>
+      <text x="520" y="145" fill="#d29922" font-size="10">bk → prev free chunk</text>
+
+      <!-- Off-by-one annotation -->
+      <line x1="180" y1="155" x2="180" y2="155" stroke="#f85149"/>
+      <text x="30" y="165" fill="#f85149" font-size="10">off-by-one</text>
+      <text x="30" y="178" fill="#f85149" font-size="10">corruption →</text>
+      <line x1="100" y1="172" x2="178" y2="172" stroke="#f85149" stroke-width="1" marker-end="url(#arr)"/>
+
+      <!-- Sizes -->
+      <text x="80" y="240" fill="#8b949e" font-size="11">x/4gx (ptr - 0x10)        ← examine chunk header: prev_size, size, fd, bk</text>
+      <text x="80" y="258" fill="#8b949e" font-size="11">x/4gx ptr                 ← user data start (fd/bk visible when freed)</text>
+      <text x="80" y="276" fill="#d29922" font-size="11">size field = actual_size | flags   ← mask: size &amp; ~0x7 = real size</text>
+    </svg>
+    <p class="diagram-caption">Figure: ptmalloc chunk — user pointer is 16 bytes past chunk start; fd/bk overlay user data when freed</p>
+  </div>
+
+  <!-- ═══════════ 15. GDB COMPLETE REFERENCE ═══════════ -->
+  <div id="gdbref" class="sec-head">
+    <span class="sec-icon">🛠</span>
+    <span class="sec-label">GDB Debugging Workflows — Complete Reference</span>
+    <div class="sec-line"></div>
+    <span class="sec-count">§15</span>
+  </div>
+
+  <h2>Launch &amp; Attach</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Starting GDB</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Load binary</span>
+gdb ./target
+
+<span class="cmt"># Load with arguments</span>
+gdb --args ./target arg1 arg2
+
+<span class="cmt"># Attach to running process</span>
+gdb -p &lt;PID&gt;
+
+<span class="cmt"># Open core dump</span>
+gdb ./target core
+
+<span class="cmt"># Batch mode — run script and exit (no interactive prompt)</span>
+gdb -batch -ex "run" -ex "bt" ./target
+
+<span class="cmt"># With init file override</span>
+gdb -x /path/to/script.gdb ./target
+
+<span class="cmt"># Quiet startup (suppress banner)</span>
+gdb -q ./target
+
+<span class="cmt"># Pass stdin payload</span>
+gdb -q ./target &lt;&lt;&lt; $(python3 -c "print('A'*300)")</pre>
+  </div>
+
+  <h2>Breakpoints — Full Syntax</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Setting, managing, and scripting breakpoints</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># By function name</span>
+<span class="kw">break</span> main
+<span class="kw">break</span> vulnerable_function
+
+<span class="cmt"># By raw address (required on stripped binaries)</span>
+<span class="kw">break</span> *0x555555555219
+
+<span class="cmt"># By file and line</span>
+<span class="kw">break</span> target.c:42
+
+<span class="cmt"># Temporary breakpoint (auto-deletes after first hit)</span>
+<span class="kw">tbreak</span> main
+
+<span class="cmt"># Conditional breakpoint</span>
+<span class="kw">break</span> malloc <span class="kw">if</span> $rdi &gt; 1024
+<span class="kw">break</span> target.c:42 <span class="kw">if</span> i == 0
+
+<span class="cmt"># Regex breakpoint — set on every function matching pattern</span>
+<span class="kw">rbreak</span> ^str.*        <span class="cmt"># breaks on strcat, strcpy, strlen, etc.</span>
+
+<span class="cmt"># Break on every function in a file</span>
+<span class="kw">rbreak</span> target.c:.
+
+<span class="cmt"># Disable / enable / delete</span>
+<span class="kw">info</span> breakpoints        <span class="cmt"># list all — shows Num column</span>
+<span class="kw">disable</span> 2               <span class="cmt"># disable breakpoint #2</span>
+<span class="kw">enable</span>  2
+<span class="kw">delete</span>  2               <span class="cmt"># permanently remove</span>
+<span class="kw">delete</span>                  <span class="cmt"># delete ALL breakpoints (confirms)</span>
+
+<span class="cmt"># Skip N hits before stopping</span>
+<span class="kw">ignore</span> 1 10             <span class="cmt"># ignore breakpoint #1 for next 10 hits</span>
+
+<span class="cmt"># Run commands automatically when breakpoint fires</span>
+<span class="kw">break</span> malloc
+<span class="kw">commands</span> 1              <span class="cmt"># enter command sequence for BP #1</span>
+  silent
+  printf <span class="str">"malloc(%ld) → %p\n"</span>, $rdi, $rax
+  <span class="kw">continue</span>
+<span class="kw">end</span>
+
+<span class="cmt"># Add condition to existing BP</span>
+<span class="kw">condition</span> 1 $rdi == 512</pre>
+  </div>
+
+  <h2>Execution Control</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Navigate program flow</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="kw">run</span>                     <span class="cmt"># start/restart from beginning</span>
+<span class="kw">run</span> arg1 arg2           <span class="cmt"># with arguments</span>
+<span class="kw">run</span> &lt; /tmp/payload.bin  <span class="cmt"># redirect stdin from file</span>
+
+<span class="kw">continue</span>  <span class="cmt">(or c)</span>       <span class="cmt"># resume until next BP/signal</span>
+<span class="kw">step</span>      <span class="cmt">(or s)</span>       <span class="cmt"># source line step — enters functions</span>
+<span class="kw">next</span>      <span class="cmt">(or n)</span>       <span class="cmt"># source line step — steps OVER function calls</span>
+<span class="kw">stepi</span>     <span class="cmt">(or si)</span>      <span class="cmt"># single machine instruction — enters calls</span>
+<span class="kw">nexti</span>     <span class="cmt">(or ni)</span>      <span class="cmt"># single machine instruction — steps over calls</span>
+<span class="kw">finish</span>                  <span class="cmt"># run until function returns; prints return value</span>
+<span class="kw">until</span>     addr          <span class="cmt"># run until reaching address (useful for loops)</span>
+<span class="kw">jump</span>      *0xaddr       <span class="cmt"># move RIP to address without executing (skip code)</span>
+<span class="kw">signal</span>    SIGINT        <span class="cmt"># inject signal into process</span>
+<span class="kw">kill</span>                    <span class="cmt"># kill inferior (stop without exiting GDB)</span>
+<span class="kw">quit</span>                    <span class="cmt"># exit GDB</span>
+
+<span class="cmt"># Reverse execution (requires: target record)</span>
+<span class="kw">record</span>                  <span class="cmt"># begin recording execution for replay</span>
+<span class="kw">reverse-continue</span>  <span class="cmt">(rc)</span> <span class="cmt"># run backward to previous BP</span>
+<span class="kw">reverse-step</span>      <span class="cmt">(rs)</span> <span class="cmt"># one source line backward</span>
+<span class="kw">reverse-stepi</span>     <span class="cmt">(rsi)</span><span class="cmt"># one instruction backward</span>
+<span class="kw">reverse-next</span>      <span class="cmt">(rn)</span> <span class="cmt"># one source line backward, step over</span></pre>
+  </div>
+
+  <h2>Memory Examination — x Command Deep Dive</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">x/NuF — count, unit, format</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Syntax: x/NuF  where N=count  u=unit  F=format</span>
+<span class="cmt"># Units:  b=byte  h=halfword(2)  w=word(4)  g=giant(8)</span>
+<span class="cmt"># Format: x=hex  d=decimal  u=unsigned  o=octal  t=binary  s=string  i=instruction  a=address  c=char</span>
+
+x/64xb $rsp            <span class="cmt"># 64 bytes in hex — byte-by-byte</span>
+x/32xw $rsp            <span class="cmt"># 32 dwords (4 bytes each) in hex</span>
+x/16xg $rsp            <span class="cmt"># 16 qwords (8 bytes each) in hex</span>
+x/4gx  $rbp-0x20      <span class="cmt"># 4 qwords starting at rbp-32</span>
+
+x/s    0x555555557000  <span class="cmt"># print as C string</span>
+x/20i  $pc             <span class="cmt"># disassemble 20 instructions from RIP</span>
+x/20i  0x555555555219  <span class="cmt"># disassemble from absolute address</span>
+x/i    $pc             <span class="cmt"># just the current instruction</span>
+
+x/4gx  ($rdi-16)       <span class="cmt"># chunk header (prev_size, size, fd, bk) — malloc pointer</span>
+x/40xb $rsp            <span class="cmt"># find null terminator after overflow fill</span>
+x/64xg 0x555555559000  <span class="cmt"># raw heap region scan</span>
+
+<span class="cmt"># Examine after last x command — "." repeats with next address</span>
+x/16gx 0x7ffff7c00000  <span class="cmt"># start of libc — scan for ROP gadgets</span>
+
+<span class="cmt"># Search memory for a byte pattern (requires pwndbg or GDB 7.5+)</span>
+<span class="kw">find</span> /b 0x555555554000, 0x555555558000, 0x41, 0x41, 0x41, 0x41
+
+<span class="cmt"># search for a string</span>
+<span class="kw">find</span> /s 0x7ffffffde000, 0x7ffffffff000, "AAAA"</pre>
+  </div>
+
+  <h2>Registers &amp; Stack Inspection</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Registers, frames, locals, args</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="kw">info</span> registers            <span class="cmt"># all general-purpose + eflags</span>
+<span class="kw">info</span> registers rsp rip rbp <span class="cmt"># just these three</span>
+<span class="kw">info</span> registers eflags      <span class="cmt"># flags register (ZF CF OF SF)</span>
+<span class="kw">info</span> all-registers         <span class="cmt"># includes SSE/AVX/FP registers</span>
+
+<span class="kw">info</span> frame                 <span class="cmt"># current frame: saved RIP, RBP, size</span>
+<span class="kw">info</span> args                  <span class="cmt"># function arguments (requires symbols)</span>
+<span class="kw">info</span> locals                <span class="cmt"># local variables (requires symbols)</span>
+
+<span class="kw">backtrace</span>       <span class="cmt">(bt)</span>       <span class="cmt"># call stack</span>
+<span class="kw">backtrace</span> full             <span class="cmt"># call stack + locals at each frame</span>
+<span class="kw">backtrace</span> 5                <span class="cmt"># top 5 frames only</span>
+<span class="kw">frame</span> 3                    <span class="cmt"># switch to frame #3</span>
+<span class="kw">up</span>                         <span class="cmt"># move to caller frame</span>
+<span class="kw">down</span>                       <span class="cmt"># move to callee frame</span>
+
+<span class="cmt"># Modify a register</span>
+set $rip = 0x555555555219   <span class="cmt"># redirect execution</span>
+set $rsp = $rsp - 8         <span class="cmt"># adjust stack pointer</span>
+set $rax = 0                <span class="cmt"># override return value</span>
+
+<span class="cmt"># Print register value as address symbol</span>
+<span class="kw">info</span> symbol $rip           <span class="cmt"># resolve address to nearest symbol</span></pre>
+  </div>
+
+  <h2>Watchpoints &amp; Catchpoints</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Stop on memory access, syscalls, exceptions</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Watchpoints — stop when memory is accessed</span>
+<span class="kw">watch</span>   *0x555555559010     <span class="cmt"># stop on WRITE to this address</span>
+<span class="kw">rwatch</span>  *0x555555559010     <span class="cmt"># stop on READ</span>
+<span class="kw">awatch</span>  *0x555555559010     <span class="cmt"># stop on READ or WRITE</span>
+<span class="kw">watch</span>   -l *$rdi            <span class="cmt"># watch location (follows pointer if it moves)</span>
+<span class="kw">watch</span>   buf[0]              <span class="cmt"># watch named variable (requires symbols)</span>
+<span class="kw">watch</span>   *($rbp - 0x8)       <span class="cmt"># watch canary slot</span>
+
+<span class="cmt"># Catchpoints — stop on events</span>
+<span class="kw">catch</span> syscall               <span class="cmt"># stop on EVERY syscall</span>
+<span class="kw">catch</span> syscall write         <span class="cmt"># stop only on write(2)</span>
+<span class="kw">catch</span> syscall mmap brk      <span class="cmt"># memory allocation syscalls</span>
+<span class="kw">catch</span> throw                 <span class="cmt"># C++ exceptions thrown</span>
+<span class="kw">catch</span> catch                 <span class="cmt"># C++ exceptions caught</span>
+<span class="kw">catch</span> exec                  <span class="cmt"># stop when execve() is called</span>
+<span class="kw">catch</span> fork                  <span class="cmt"># stop when fork() is called</span>
+<span class="kw">catch</span> signal SIGSEGV        <span class="cmt"># stop on segfault before handler</span>
+<span class="kw">catch</span> signal all            <span class="cmt"># stop on any signal</span>
+
+<span class="cmt"># Signal handling config</span>
+<span class="kw">handle</span> SIGSEGV stop print   <span class="cmt"># stop and print on segfault (default)</span>
+<span class="kw">handle</span> SIGPIPE nostop pass  <span class="cmt"># ignore SIGPIPE, pass to program</span>
+<span class="kw">info</span> signals                <span class="cmt"># show all signal handling config</span></pre>
+  </div>
+
+  <h2>Disassembly &amp; Symbols</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Reverse engineer stripped binaries</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Disassemble</span>
+<span class="kw">disassemble</span> main            <span class="cmt"># named function (needs symbols)</span>
+<span class="kw">disassemble</span> $pc, +64        <span class="cmt"># 64 bytes from current IP</span>
+<span class="kw">disassemble</span> 0x555555555219, 0x555555555280
+<span class="kw">disassemble</span> /r main         <span class="cmt"># include raw hex bytes</span>
+<span class="kw">disassemble</span> /m main         <span class="cmt"># interleave source lines</span>
+x/20i $pc                   <span class="cmt"># works on stripped — no symbol needed</span>
+
+<span class="cmt"># Set disassembly flavor</span>
+set disassembly-flavor intel <span class="cmt"># Intel syntax (default AT&amp;T is confusing)</span>
+set disassembly-flavor att
+
+<span class="cmt"># Symbol resolution</span>
+<span class="kw">info</span> functions              <span class="cmt"># list all known functions</span>
+<span class="kw">info</span> functions malloc       <span class="cmt"># filter by name</span>
+<span class="kw">info</span> variables              <span class="cmt"># global/static variables</span>
+<span class="kw">info</span> symbol 0x7ffff7c4b6d0  <span class="cmt"># resolve address → symbol name</span>
+<span class="kw">info</span> address malloc         <span class="cmt"># resolve symbol → address</span>
+
+<span class="cmt"># PLT / GOT inspection (pwndbg)</span>
+plt                          <span class="cmt"># print PLT entries</span>
+got                          <span class="cmt"># print GOT entries + resolved addresses</span>
+
+<span class="cmt"># Examine PLT manually</span>
+x/3i 0x555555555090          <span class="cmt"># PLT stub: jmp [GOT], push index, jmp resolver</span>
+x/gx 0x555555558020          <span class="cmt"># GOT entry — address after first resolution</span></pre>
+  </div>
+
+  <h2>Convenience Variables &amp; Expressions</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Scripting inside GDB</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Define variables</span>
+set $buf  = $rsp + 0x10
+set $canary = *((long*)($rbp - 0x8))
+set $retaddr = *((long*)($rbp + 0x8))
+
+<span class="cmt"># Print expressions</span>
+<span class="kw">print</span>   $retaddr            <span class="cmt"># print value</span>
+<span class="kw">print</span>   /x $retaddr        <span class="cmt"># in hex</span>
+<span class="kw">print</span>   (int)$rax          <span class="cmt"># cast to int</span>
+<span class="kw">print</span>   (char*)$rdi        <span class="cmt"># interpret as string pointer</span>
+<span class="kw">print</span>   sizeof(long)       <span class="cmt"># 8 on x86-64</span>
+
+<span class="cmt"># Arithmetic</span>
+<span class="kw">print</span>   $rbp - $rsp        <span class="cmt"># frame size in bytes</span>
+<span class="kw">print</span>   0x41414141 &lt;&lt; 32 | 0x41414141
+
+<span class="cmt"># Modify memory directly</span>
+set *((int*)0x555555559010) = 0xdeadbeef
+set {char[8]}$rsp = "BBBBBBBB"
+
+<span class="cmt"># Call functions mid-session</span>
+<span class="kw">call</span> (int) printf("rsp=%p\n", $rsp)
+<span class="kw">call</span> malloc(256)           <span class="cmt"># allocate and see address returned</span>
+<span class="kw">call</span> system("id")          <span class="cmt"># inject command if NX bypassed</span></pre>
+  </div>
+
+  <h2>Finding Offset to RIP (Exploit Development)</h2>
+  <div class="snippet">
+    <div class="snip-label shell">Pattern workflow — from overflow to offset</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Step 1: generate cyclic pattern (pwntools)</span>
+python3 -c "from pwn import *; print(cyclic(400))" &gt; /tmp/pattern.txt
+
+<span class="cmt"># Step 2: run in GDB with pattern as input</span>
+gdb -q ./target
+(gdb) run &lt; /tmp/pattern.txt
+
+<span class="cmt"># Step 3: crash — check what landed in RIP / RSP</span>
+(gdb) x/gx $rsp            <span class="cmt"># value of [RSP] at crash = overwritten ret addr</span>
+(gdb) info registers rip   <span class="cmt"># or check RIP directly</span>
+
+<span class="cmt"># Step 4: find offset</span>
+python3 -c "from pwn import *; print(cyclic_find(0x6161616c))"   <span class="cmt"># → offset</span>
+
+<span class="cmt"># Alternative: msf pattern (Metasploit not required — script it)</span>
+python3 -c "
+import string
+chars = string.ascii_letters + string.digits
+pat = ''.join(chars[i%len(chars)] for i in range(400))
+print(pat)
+" &gt; /tmp/msf_pattern.txt</pre>
+  </div>
+
+  <div class="snippet">
+    <div class="snip-label gdb">Manual offset calculation in GDB</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># After crash on stack smash — we are in SIGABRT handler</span>
+<span class="cmt"># Go to frame where overflow happened</span>
+(gdb) backtrace             <span class="cmt"># find the vulnerable function frame #</span>
+(gdb) frame 5               <span class="cmt"># switch to it</span>
+(gdb) info frame            <span class="cmt"># shows: saved rip = 0x4141414141414141</span>
+
+<span class="cmt"># Compute: offset = &amp;saved_rip - buf_start</span>
+(gdb) x/gx $rbp+8          <span class="cmt"># saved RIP slot address</span>
+(gdb) print $rbp + 8 - &lt;buf_addr&gt;   <span class="cmt"># = number of bytes to reach RIP</span>
+
+<span class="cmt"># Verify offset</span>
+python3 -c "
+from pwn import *
+p = process('./target')
+payload = b'A' * &lt;offset&gt; + p64(0xdeadbeefcafebabe)
+p.sendline(payload)
+p.wait()
+"</pre>
+  </div>
+
+  <h2>ASLR &amp; Library Base Leaks</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Defeating ASLR in GDB + live binary</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Disable ASLR for GDB session only (easier testing)</span>
+(gdb) set disable-randomization on    <span class="cmt"># default in GDB</span>
+(gdb) set disable-randomization off   <span class="cmt"># test with ASLR on</span>
+
+<span class="cmt"># Find libc base in running process</span>
+(gdb) info proc mappings
+<span class="cmt"># look for libc-2.35.so — the r-xp segment start address = libc base</span>
+
+<span class="cmt"># Compute offset to target gadget</span>
+<span class="cmt"># libc_base = 0x7ffff7c00000 (from mappings)</span>
+<span class="cmt"># system@libc = base + offset_from_readelf</span>
+python3 -c "
+import subprocess, re
+out = subprocess.check_output('readelf -s /lib/x86_64-linux-gnu/libc.so.6', shell=True).decode()
+for line in out.splitlines():
+    if ' system@@' in line or ' system@' in line:
+        print(line)
+"
+<span class="cmt"># system offset → add to libc_base → call address</span>
+
+<span class="cmt"># Find /bin/sh string in libc</span>
+(gdb) find 0x7ffff7c00000, 0x7ffff7dbd000, "/bin/sh"
+<span class="cmt"># → 0x7ffff7d8c678  (use as RDI in ret2libc)</span></pre>
+  </div>
+
+  <h2>ROP Chain Validation</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Verify gadgets execute correctly</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Find gadget addresses with ROPgadget (external tool)</span>
+ROPgadget --binary ./target --rop | grep "pop rdi"
+<span class="cmt"># → 0x000000000040118b : pop rdi ; ret</span>
+
+<span class="cmt"># Confirm gadget in GDB</span>
+(gdb) x/3i 0x40118b
+<span class="cmt"># 0x40118b:  pop    %rdi</span>
+<span class="cmt"># 0x40118c:  ret</span>
+
+<span class="cmt"># Set RIP to gadget manually and step through</span>
+(gdb) break *0x40118b
+(gdb) set $rip = 0x40118b
+(gdb) set $rsp = &lt;stack_containing_rop_chain&gt;
+(gdb) stepi                   <span class="cmt"># pop rdi — watch $rdi change</span>
+(gdb) stepi                   <span class="cmt"># ret — watch $rip = next gadget</span>
+
+<span class="cmt"># Inspect full ROP chain on stack</span>
+(gdb) x/20gx $rsp             <span class="cmt"># each 8-byte entry = one gadget/value</span></pre>
+  </div>
+
+  <h2>GDB Scripting &amp; .gdbinit Automation</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Automate workflows with scripts</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># ~/.gdbinit — runs on every GDB start</span>
+set disassembly-flavor intel
+set print pretty on
+set print array on
+set pagination off           <span class="cmt"># no "--More--" prompts</span>
+set confirm off              <span class="cmt"># no "delete all breakpoints?" prompt</span>
+set follow-fork-mode child   <span class="cmt"># follow child process on fork</span>
+
+<span class="cmt"># Define a custom command</span>
+define hexdump
+  x/64xb $arg0
+end
+<span class="cmt"># Usage: hexdump $rsp</span>
+
+define stackdump
+  x/32gx $rsp
+  info frame
+end
+
+<span class="cmt"># Hook — run automatically before every step/next</span>
+define hook-stop
+  x/i $pc
+end
+
+<span class="cmt"># Python scripting inside GDB</span>
+python
+import gdb
+
+def on_stop(event):
+    frame = gdb.selected_frame()
+    pc    = frame.pc()
+    print(f"[stop] RIP=0x{pc:016x}")
+
+gdb.events.stop.connect(on_stop)
+end</pre>
+  </div>
+
+  <h2>pwndbg / GEF Extensions</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">pwndbg — install and key commands</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Install pwndbg</span>
+git clone https://github.com/pwndbg/pwndbg &amp;&amp; cd pwndbg &amp;&amp; ./setup.sh
+
+<span class="cmt"># Heap visualization</span>
+heap                         <span class="cmt"># all malloc chunks in main arena</span>
+heap --all                   <span class="cmt"># including all arenas</span>
+bins                         <span class="cmt"># tcache, fast, small, large, unsorted bins</span>
+tcache                       <span class="cmt"># tcache bins only with counts</span>
+vis_heap_chunks              <span class="cmt"># color-coded ASCII heap map</span>
+vis_heap_chunks --resolve    <span class="cmt"># resolve pointers to symbols</span>
+arena                        <span class="cmt"># main_arena internal struct</span>
+malloc_chunk 0x555555559010  <span class="cmt"># parse one chunk's header</span>
+
+<span class="cmt"># Memory &amp; mappings</span>
+vmmap                        <span class="cmt"># virtual memory map (prettier than info proc)</span>
+vmmap libc                   <span class="cmt"># filter to libc mappings only</span>
+search -x 41414141           <span class="cmt"># search all writable regions for 0x41414141</span>
+search -s "/bin/sh"          <span class="cmt"># find string in memory</span>
+
+<span class="cmt"># Binary info</span>
+checksec                     <span class="cmt"># NX, PIE, RELRO, canary, FORTIFY state</span>
+got                          <span class="cmt"># GOT entries + current resolved addresses</span>
+plt                          <span class="cmt"># PLT stubs</span>
+rop                          <span class="cmt"># ROP gadgets in binary</span>
+
+<span class="cmt"># Exploit helpers</span>
+cyclic 200                   <span class="cmt"># generate cyclic pattern</span>
+cyclic -l 0x6161616c         <span class="cmt"># find offset for that 4-byte value</span>
+distance $rsp $rbp           <span class="cmt"># compute distance between two addresses</span></pre>
+  </div>
+
+  <h2>TUI Mode — Terminal UI</h2>
+  <div class="snippet">
+    <div class="snip-label gdb">Split-screen debugging in the terminal</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># Enable TUI</span>
+tui enable                   <span class="cmt"># or press Ctrl-X Ctrl-A</span>
+<span class="kw">layout</span> asm                  <span class="cmt"># top pane: disassembly</span>
+<span class="kw">layout</span> reg                  <span class="cmt"># top pane: registers</span>
+<span class="kw">layout</span> src                  <span class="cmt"># top pane: source (needs debug symbols)</span>
+<span class="kw">layout</span> split                <span class="cmt"># source + asm both visible</span>
+<span class="kw">layout</span> next                 <span class="cmt"># cycle through layouts</span>
+
+<span class="cmt"># Focus between panes</span>
+<span class="kw">focus</span> cmd                   <span class="cmt"># focus on command pane (for input)</span>
+<span class="kw">focus</span> asm                   <span class="cmt"># focus on assembly pane (for scrolling)</span>
+<span class="kw">focus</span> reg                   <span class="cmt"># focus on register pane</span>
+
+<span class="cmt"># Refresh if display corrupts</span>
+<span class="kw">refresh</span>                     <span class="cmt"># redraw TUI</span>
+tui disable                  <span class="cmt"># back to text mode</span>
+
+<span class="cmt"># Keyboard shortcuts in TUI</span>
+<span class="cmt"># Ctrl-X 1   — single window mode</span>
+<span class="cmt"># Ctrl-X 2   — two window mode</span>
+<span class="cmt"># Ctrl-X A   — toggle TUI on/off</span>
+<span class="cmt"># PageUp/Down — scroll active pane</span></pre>
+  </div>
+
+  <h2>Remote Debugging &amp; QEMU</h2>
+  <div class="snippet">
+    <div class="snip-label shell">gdbserver + cross-arch debugging</div>
+    <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+    <pre><span class="cmt"># On the TARGET machine (ARM, MIPS, embedded, etc.)</span>
+gdbserver :1234 ./target                   <span class="cmt"># listen on port 1234</span>
+gdbserver :1234 --attach &lt;PID&gt;            <span class="cmt"># attach to running process</span>
+
+<span class="cmt"># On the ANALYSIS machine</span>
+gdb-multiarch ./target
+(gdb) target remote &lt;target_ip&gt;:1234
+(gdb) continue
+
+<span class="cmt"># QEMU user-mode (single binary, no VM)</span>
+qemu-x86_64 -g 1234 ./target              <span class="cmt"># start with GDB stub on port 1234</span>
+gdb ./target
+(gdb) target remote localhost:1234
+
+<span class="cmt"># QEMU system-mode (full VM)</span>
+qemu-system-x86_64 -s -S -kernel vmlinuz … <span class="cmt"># -s = :1234 stub, -S = pause at start</span>
+gdb
+(gdb) target remote localhost:1234
+(gdb) set architecture i386:x86-64
+(gdb) continue</pre>
+  </div>
+
+  <h3>Quick Reference Card</h3>
+  <table class="ref-table">
+    <thead><tr><th>Command</th><th>What it does</th><th>When to use</th></tr></thead>
+    <tbody>
+      <tr><td><code>break *0xaddr</code></td><td>BP at raw address</td><td>Stripped binaries — no symbol names</td></tr>
+      <tr><td><code>x/64xb $rsp</code></td><td>64 bytes from RSP</td><td>Spot overflow fill pattern (0x41)</td></tr>
+      <tr><td><code>x/20i $pc</code></td><td>Disassemble from RIP</td><td>See what instruction is about to execute</td></tr>
+      <tr><td><code>info proc mappings</code></td><td>Virtual memory map</td><td>Find libc base, stack bounds, heap range</td></tr>
+      <tr><td><code>watch *($rbp-8)</code></td><td>Watch canary slot</td><td>Catch the exact write that corrupts canary</td></tr>
+      <tr><td><code>catch syscall write</code></td><td>Break on write()</td><td>Intercept output — trace exploitation</td></tr>
+      <tr><td><code>find /b start, end, bytes</code></td><td>Search memory</td><td>Locate shellcode, strings, gadgets</td></tr>
+      <tr><td><code>set $rip = 0xaddr</code></td><td>Redirect execution</td><td>Skip code, test gadgets interactively</td></tr>
+      <tr><td><code>call malloc(256)</code></td><td>Allocate mid-session</td><td>Test heap state without restarting</td></tr>
+      <tr><td><code>disas /r main</code></td><td>Disassemble + raw bytes</td><td>Compare opcodes against known gadgets</td></tr>
+      <tr><td><code>backtrace full</code></td><td>Stack + locals</td><td>See variable values at every frame</td></tr>
+      <tr><td><code>record + rc</code></td><td>Reverse execution</td><td>Step backward to the corrupting instruction</td></tr>
+      <tr><td><code>layout split</code></td><td>TUI asm + src</td><td>Visual debugging with source and disasm</td></tr>
+      <tr><td><code>rbreak ^__libc_</code></td><td>BP on all libc fns</td><td>Trace every libc call in sequence</td></tr>
+      <tr><td><code>ignore 1 99</code></td><td>Skip 99 BP hits</td><td>Break on the 100th malloc — skip early ones</td></tr>
     </tbody>
   </table>
 
